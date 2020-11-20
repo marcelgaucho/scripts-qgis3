@@ -19,7 +19,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString)
-from qgis import processing
+import processing
 
 
 class FindOverlapInTwoLayers(QgsProcessingAlgorithm):
@@ -44,7 +44,6 @@ class FindOverlapInTwoLayers(QgsProcessingAlgorithm):
     OUTPUT = 'OUTPUT'
     TABLE = 'TABLE'
     TABLE2 = 'TABLE2'
-    PRIMARY_KEY = 'PRIMARY_KEY'
 
     def tr(self, string):
         """

@@ -20,7 +20,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString,
                        QgsProcessingParameterNumber)
-from qgis import processing
+import processing
 
 
 class FindMicroDangles(QgsProcessingAlgorithm):

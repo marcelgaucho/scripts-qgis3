@@ -19,7 +19,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString)
-from qgis import processing
+import processing
 
 
 class FindOverlapInOneLayer(QgsProcessingAlgorithm):
