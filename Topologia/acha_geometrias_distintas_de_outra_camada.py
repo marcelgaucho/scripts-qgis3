@@ -18,7 +18,8 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
-                       QgsProcessingParameterString)
+                       QgsProcessingParameterString,
+                       QgsProcessingParameterVectorDestination)
 import processing
 
 
@@ -93,7 +94,7 @@ class FindDifferentGeometriesFromOtherLayer(QgsProcessingAlgorithm):
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
         self.addParameter(
-            QgsProcessingParameterFeatureSink(
+            QgsProcessingParameterVectorDestination(
                 self.OUTPUT,
                 self.tr('Output layer')
             )
@@ -114,7 +115,7 @@ class FindDifferentGeometriesFromOtherLayer(QgsProcessingAlgorithm):
         """
         Here is where the processing itself takes place.
         """
-        
+        output = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
 
         # DO SOMETHING       
         sql = (f'SELECT T1.geom FROM {parameters[self.TABLE]} AS T1 LEFT JOIN {parameters[self.TABLE2]} AS T2 '  
@@ -126,7 +127,7 @@ class FindDifferentGeometriesFromOtherLayer(QgsProcessingAlgorithm):
         find_pseudo = processing.run("gdal:executesql",
                                    {'INPUT': parameters['INPUT'],
                                    'SQL':sql,
-                                   'OUTPUT': parameters['OUTPUT']},
+                                   'OUTPUT': output},
                                    context=context, feedback=feedback, is_child_algorithm=True)
 
 

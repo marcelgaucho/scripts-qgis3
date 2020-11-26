@@ -18,7 +18,8 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
-                       QgsProcessingParameterString)
+                       QgsProcessingParameterString,
+                       QgsProcessingParameterVectorDestination)
 import processing
 
 
@@ -92,7 +93,7 @@ class FindPolygonsWithHoles(QgsProcessingAlgorithm):
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
         self.addParameter(
-            QgsProcessingParameterFeatureSink(
+            QgsProcessingParameterVectorDestination(
                 self.OUTPUT,
                 self.tr('Output layer')
             )
@@ -108,7 +109,7 @@ class FindPolygonsWithHoles(QgsProcessingAlgorithm):
         """
         Here is where the processing itself takes place.
         """
-
+        output = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
 
         # DO SOMETHING       
         sql = ('SELECT geom FROM (SELECT (ST_Dump(geom)).geom FROM '  
@@ -120,7 +121,7 @@ class FindPolygonsWithHoles(QgsProcessingAlgorithm):
         find_pseudo = processing.run("gdal:executesql",
                                    {'INPUT': parameters['INPUT'],
                                    'SQL':sql,
-                                   'OUTPUT': parameters['OUTPUT']},
+                                   'OUTPUT': output},
                                    context=context, feedback=feedback, is_child_algorithm=True)
 
 

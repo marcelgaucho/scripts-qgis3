@@ -19,7 +19,8 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString,
-                       QgsProcessingParameterNumber)
+                       QgsProcessingParameterNumber,
+                       QgsProcessingParameterVectorDestination)
 import processing
 
 
@@ -102,7 +103,7 @@ class FindMicroDangles(QgsProcessingAlgorithm):
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
         self.addParameter(
-            QgsProcessingParameterFeatureSink(
+            QgsProcessingParameterVectorDestination(
                 self.OUTPUT,
                 self.tr('Output layer')
             )
@@ -118,22 +119,8 @@ class FindMicroDangles(QgsProcessingAlgorithm):
         """
         Here is where the processing itself takes place.
         """
-
-        '''
-        SELECT DISTINCT dangles.geom FROM
-(SELECT geom FROM  
-         (SELECT geom, count(*) AS cnt  
-          FROM  
-              (SELECT  ST_StartPoint(geom) AS geom FROM bc250_base.tra_trecho_rodoviario_l
-               UNION ALL
-               SELECT  ST_EndPoint(geom) AS geom FROM bc250_base.tra_trecho_rodoviario_l) AS extremos
-         GROUP BY geom) AS nos_agrupados
-     WHERE cnt = 1) AS dangles
-JOIN
-bc250_base.tra_trecho_rodoviario_l AS B
-ON ST_DWithin(dangles.geom, B.geom, 0.0005) AND ST_Distance(dangles.geom, B.geom) BETWEEN 0.0000001 AND 0.0005;
-        '''
-        
+        output = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+       
         # Tolerance
         tolerance = parameters[self.TOLERANCE]
         table = parameters[self.TABLE]
@@ -156,7 +143,7 @@ ON ST_DWithin(dangles.geom, B.geom, 0.0005) AND ST_Distance(dangles.geom, B.geom
         find_pseudo = processing.run("gdal:executesql",
                                    {'INPUT': parameters['INPUT'],
                                    'SQL':sql,
-                                   'OUTPUT': parameters['OUTPUT']},
+                                   'OUTPUT': output},
                                    context=context, feedback=feedback, is_child_algorithm=True)
 
 
