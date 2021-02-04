@@ -60,7 +60,7 @@ class FindMicroDangles(QgsProcessingAlgorithm):
         return 'findmicrodanglesquery'
 
     def displayName(self):
-        return self.tr('Find Micro Dangles')
+        return self.tr('Find Micro Dangles (Undershoot and Overshoot)')
 
     def group(self):
         return self.tr('Topology Scripts')
