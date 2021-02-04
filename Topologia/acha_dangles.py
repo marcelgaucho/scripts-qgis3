@@ -44,6 +44,8 @@ class FindDangles(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     TABLE = 'TABLE'
+    PRIMARY_KEY = 'PRIMARY_KEY'
+
 
     def tr(self, string):
         """
@@ -103,7 +105,10 @@ class FindDangles(QgsProcessingAlgorithm):
                                                        self.tr('Table'),
                                                        defaultValue=''))
 
-
+        # Input Primary Key
+        self.addParameter(QgsProcessingParameterString(self.PRIMARY_KEY,
+                                                       self.tr('Primary Key'),
+                                                       defaultValue='id'))
 
     def processAlgorithm(self, parameters, context, feedback):
         """
@@ -112,20 +117,23 @@ class FindDangles(QgsProcessingAlgorithm):
         output = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
 
         # DO SOMETHING       
-        sql = ('WITH nodes AS '  
-               '(SELECT ST_StartPoint(geom) AS geom FROM ' 
-               '{0} UNION ALL ' 
-               'SELECT ST_EndPoint(geom) AS geom FROM {0}) ' 
-                'SELECT geom FROM nodes '
-                'GROUP BY geom HAVING count(*) = 1').format(parameters[self.TABLE])
+        sql = ('SELECT endpoints.geom FROM '  
+                    f'(SELECT {parameters[self.PRIMARY_KEY]}, ST_StartPoint(ST_GeometryN(geom, 1)) AS geom FROM {parameters[self.TABLE]} ' 
+                     'UNION ALL '
+                    f'SELECT {parameters[self.PRIMARY_KEY]}, ST_EndPoint(ST_GeometryN(geom, 1)) AS geom FROM {parameters[self.TABLE]} '
+                     ') AS endpoints ' 
+               f'LEFT JOIN {parameters[self.TABLE]} AS T '
+               f'ON endpoints.{parameters[self.PRIMARY_KEY]} != T.{parameters[self.PRIMARY_KEY]} '
+                'AND ST_DWithin(endpoints.geom, T.geom, 0.0000001) '
+                'WHERE T.geom IS NULL')
                 
         feedback.pushInfo(sql)
 
-        find_pseudo = processing.run("gdal:executesql",
+        found = processing.run("gdal:executesql",
                                    {'INPUT': parameters['INPUT'],
                                    'SQL':sql,
                                    'OUTPUT': output},
                                    context=context, feedback=feedback, is_child_algorithm=True)
 
 
-        return {self.OUTPUT: find_pseudo['OUTPUT']}
+        return {self.OUTPUT: found['OUTPUT']}
