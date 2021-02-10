@@ -19,6 +19,7 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterString,
+                       QgsProcessingParameterNumber,
                        QgsProcessingParameterVectorDestination)
 import processing
 
@@ -44,6 +45,11 @@ class FindPseudonodes(QgsProcessingAlgorithm):
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     TABLE = 'TABLE'
+    TOLERANCE = 'TOLERANCE'
+    PRIMARY_KEY = 'PRIMARY_KEY'
+    FIELD_EXCLUDED = 'FIELD_EXCLUDED'
+    
+
 
     def tr(self, string):
         """
@@ -67,10 +73,9 @@ class FindPseudonodes(QgsProcessingAlgorithm):
         return 'topologyscripts'
 
     def shortHelpString(self):
-        return self.tr("Find pseudonodes for a line layer. It works for layers in sql databases, like postgis and geopackage, "
-                        "with the gometry field named geom. \n"
-                        "The Input layer is one layer with the connection to the database. The Table parameter is the table name. For schema-based databases, "
-                        " it must be qualified by the shema, e.g., foo.test."
+        return self.tr("Find pseudonodes for a line layer. The gometry field must be named geom. \n"
+                        "The Input layer is one layer with the connection to the database. The Table parameter is the table name. " 
+                        "It must be qualified by the shema, e.g., foo.test."
                        )
 
     def initAlgorithm(self, config=None):
@@ -89,6 +94,16 @@ class FindPseudonodes(QgsProcessingAlgorithm):
             )
         )
 
+        # Tolerance - Default is 0.000001 (11 cm in Equator)
+        self.addParameter(QgsProcessingParameterNumber(
+            self.TOLERANCE,
+            'Tolerance',
+            QgsProcessingParameterNumber.Double,
+            0.000001
+        ))
+        
+        
+        
         # We add a feature sink in which to store our processed features (this
         # usually takes the form of a newly created vector layer when the
         # algorithm is run in QGIS).
@@ -103,7 +118,16 @@ class FindPseudonodes(QgsProcessingAlgorithm):
                                                        self.tr('Table'),
                                                        defaultValue=''))
 
-
+        # Excluded Field from analysis. Adjacent features with the different field 
+        # attributes won't be considered pseudonodes                                                 
+        self.addParameter(QgsProcessingParameterString(self.FIELD_EXCLUDED,
+                                                       self.tr('Exluded Field'),
+                                                       defaultValue=''))
+                                                       
+        # Input Primary Key
+        self.addParameter(QgsProcessingParameterString(self.PRIMARY_KEY,
+                                                       self.tr('Primary Key'),
+                                                       defaultValue='id'))
 
     def processAlgorithm(self, parameters, context, feedback):
         """
@@ -111,21 +135,59 @@ class FindPseudonodes(QgsProcessingAlgorithm):
         """
         output = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
 
-        # DO SOMETHING       
-        sql = ('WITH nodes AS '  
-               '(SELECT ST_StartPoint(geom) AS geom FROM ' 
-               '{0} UNION ALL ' 
-               'SELECT ST_EndPoint(geom) AS geom FROM {0}) ' 
-                'SELECT geom FROM nodes '
-                'GROUP BY geom HAVING count(*) = 2').format(parameters[self.TABLE])
+        # DO SOMETHING 
+
+        # Tolerance and Excluded Field
+        tolerance = parameters[self.TOLERANCE]
+        field_excluded = parameters[self.FIELD_EXCLUDED]
+        #tolerance = 0.0000001 # Doesn't work, the value is passed as 0
+        
+        if field_excluded: 
+            sql = ('SELECT DISTINCT ST_StartPoint(ST_GeometryN(T1.geom, 1)) AS geom FROM '  
+                        f'{parameters[self.TABLE]} AS T1, {parameters[self.TABLE]} AS T2 ' 
+                  f'WHERE T1.{parameters[self.PRIMARY_KEY]} != T2.{parameters[self.PRIMARY_KEY]} '
+                  f'AND ST_DWithin(ST_StartPoint(ST_GeometryN(T1.geom, 1)), T2.geom, {tolerance}) AND ' 
+                   '(ST_Distance(ST_StartPoint(ST_GeometryN(T1.geom, 1)), ST_EndPoint(ST_GeometryN(T2.geom, 1))) < '
+                  f'{tolerance} OR ST_Distance(ST_StartPoint(ST_GeometryN(T1.geom, 1)), '
+                  f'ST_StartPoint(ST_GeometryN(T2.geom, 1))) < {tolerance}) '
+                  f'GROUP BY T1.{parameters[self.PRIMARY_KEY]} HAVING count(*) = 1 '
+                  f"AND COALESCE(T1.{field_excluded}, 'NULL') = COALESCE(MAX(T2.{field_excluded}), 'NULL') "
+                         'UNION '
+                   'SELECT DISTINCT ST_EndPoint(ST_GeometryN(T1.geom, 1)) AS geom FROM '  
+                        f'{parameters[self.TABLE]} AS T1, {parameters[self.TABLE]} AS T2 ' 
+                  f'WHERE T1.{parameters[self.PRIMARY_KEY]} != T2.{parameters[self.PRIMARY_KEY]} '
+                  f'AND ST_DWithin(ST_EndPoint(ST_GeometryN(T1.geom, 1)), T2.geom, {tolerance}) AND ' 
+                   '(ST_Distance(ST_EndPoint(ST_GeometryN(T1.geom, 1)), ST_EndPoint(ST_GeometryN(T2.geom, 1))) < '
+                  f'{tolerance} OR ST_Distance(ST_EndPoint(ST_GeometryN(T1.geom, 1)), '
+                  f'ST_StartPoint(ST_GeometryN(T2.geom, 1))) < {tolerance}) '
+                  f'GROUP BY T1.{parameters[self.PRIMARY_KEY]} HAVING count(*) = 1 '
+                  f"AND COALESCE(T1.{field_excluded}, 'NULL') = COALESCE(MAX(T2.{field_excluded}), 'NULL') ")
+        else:
+            sql = ('SELECT DISTINCT ST_StartPoint(ST_GeometryN(T1.geom, 1)) AS geom FROM '  
+                        f'{parameters[self.TABLE]} AS T1, {parameters[self.TABLE]} AS T2 ' 
+                  f'WHERE T1.{parameters[self.PRIMARY_KEY]} != T2.{parameters[self.PRIMARY_KEY]} '
+                  f'AND ST_DWithin(ST_StartPoint(ST_GeometryN(T1.geom, 1)), T2.geom, {tolerance}) AND ' 
+                   '(ST_Distance(ST_StartPoint(ST_GeometryN(T1.geom, 1)), ST_EndPoint(ST_GeometryN(T2.geom, 1))) < '
+                  f'{tolerance} OR ST_Distance(ST_StartPoint(ST_GeometryN(T1.geom, 1)), '
+                  f'ST_StartPoint(ST_GeometryN(T2.geom, 1))) < {tolerance}) '
+                  f'GROUP BY T1.{parameters[self.PRIMARY_KEY]} HAVING count(*) = 1 '
+                         'UNION '
+                   'SELECT DISTINCT ST_EndPoint(ST_GeometryN(T1.geom, 1)) AS geom FROM '  
+                        f'{parameters[self.TABLE]} AS T1, {parameters[self.TABLE]} AS T2 ' 
+                  f'WHERE T1.{parameters[self.PRIMARY_KEY]} != T2.{parameters[self.PRIMARY_KEY]} '
+                  f'AND ST_DWithin(ST_EndPoint(ST_GeometryN(T1.geom, 1)), T2.geom, {tolerance}) AND ' 
+                   '(ST_Distance(ST_EndPoint(ST_GeometryN(T1.geom, 1)), ST_EndPoint(ST_GeometryN(T2.geom, 1))) < '
+                  f'{tolerance} OR ST_Distance(ST_EndPoint(ST_GeometryN(T1.geom, 1)), '
+                  f'ST_StartPoint(ST_GeometryN(T2.geom, 1))) < {tolerance}) '
+                  f'GROUP BY T1.{parameters[self.PRIMARY_KEY]} HAVING count(*) = 1 ')
                 
         feedback.pushInfo(sql)
 
-        find_pseudo = processing.run("gdal:executesql",
+        found = processing.run("gdal:executesql",
                                    {'INPUT': parameters['INPUT'],
                                    'SQL':sql,
                                    'OUTPUT': output},
                                    context=context, feedback=feedback, is_child_algorithm=True)
 
 
-        return {self.OUTPUT: find_pseudo['OUTPUT']}
+        return {self.OUTPUT: found['OUTPUT']}
